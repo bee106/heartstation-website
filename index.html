@@ -24,7 +24,7 @@
     
     .shared-list { margin-top: 30px; text-align: left; }
     .card { background: #fff; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    .card-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: #888; }
+    .card-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: #888; align-items: center; }
     .nickname-tag { font-weight: bold; color: #2c3e50; font-size: 13px; background: #f0f3f4; padding: 2px 8px; border-radius: 10px; }
     .method-text { font-size: 15px; color: #333; line-height: 1.4; word-break: keep-all; margin-bottom: 10px; }
     
@@ -62,9 +62,11 @@
 
     <h3 style="text-align: left;">나만의 스트레스 해소법은?</h3>
     <p style="text-align: left;">자신만의 스트레스 해소법을 공유해주세요!</p>
-    <!-- 기본값이 "익명"으로 들어간 닉네임 입력창 -->
-    <input type="text" id="myNickname" value="익명" placeholder="닉네임 입력 (기본: 익명)">
-    <input type="text" id="myMethod" placeholder="예: 코인노래방 가서 3곡 부르기">
+    <div class="input-group">
+      <!-- 기본값이 "익명"으로 들어간 닉네임 입력창 -->
+      <input type="text" id="myNickname" value="익명" placeholder="닉네임 입력 (기본: 익명)">
+      <input type="text" id="myMethod" placeholder="예: 코인노래방 가서 3곡 부르기">
+    </div>
     <button id="submitBtn" class="submit-btn">공유하기</button>
 
     <div class="shared-list">
@@ -95,7 +97,7 @@
     import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-    // 🔴 본인의 Firebase Config 값을 아래에 덮어써주세요!
+    // 🔴 본인의 Firebase Config 값
     const firebaseConfig = {
       apiKey: "AIzaSyB9xazXebuXBmuUa1yn3o8JGFKTmhxDc_Q",
       authDomain: "heart-station-d4714.firebaseapp.com",
@@ -112,13 +114,11 @@
 
     let currentUserUid = null;
 
-    // 익명 로그인
     onAuthStateChanged(auth, (user) => {
       if (user) currentUserUid = user.uid;
       else signInAnonymously(auth).catch(console.error);
     });
 
-    // 1️⃣ 예쁜 알림(Toast) 띄우는 함수
     function showToast(message) {
       const toast = document.getElementById("toast");
       toast.innerText = message;
@@ -126,9 +126,8 @@
       setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
     }
 
-    // 2️⃣ "방금 전", "5분 전" 계산해주는 함수
     function timeAgo(date) {
-      if (!date) return "방금 전"; // 방금 글을 썼을 때(서버 시간 저장 전)
+      if (!date) return "방금 전";
       const seconds = Math.floor((new Date() - date) / 1000);
       let interval = seconds / 31536000;
       if (interval > 1) return Math.floor(interval) + "년 전";
@@ -145,31 +144,34 @@
 
     // 글 공유하기
     document.getElementById('submitBtn').addEventListener('click', async () => {
+      const nicknameVal = document.getElementById('myNickname').value.trim() || "익명";
       const inputVal = document.getElementById('myMethod').value;
+      
       if (!currentUserUid) { showToast("접속 중입니다. 잠시 후 다시 시도해주세요."); return; }
       if (inputVal.trim() === "") { showToast("스트레스 해소법을 입력해주세요!"); return; }
 
       try {
         await addDoc(collection(db, "stress_methods"), {
+          nickname: nicknameVal,
           method: inputVal,
           uid: currentUserUid,
-          likes: [], // 좋아요 목록 (빈 배열로 시작)
+          likes: [],
           createdAt: serverTimestamp()
         });
         document.getElementById('myMethod').value = ""; 
+        // 닉네임은 다시 '익명' 기본값으로 돌려놓거나 유지 (원하시면 아래 줄 주석 해제)
+        document.getElementById('myNickname').value = "익명";
         showToast("공유 완료! 마음이 한결 가벼워지셨길 바라요. 🌱");
       } catch (e) {
         console.error("에러: ", e);
       }
     });
 
-    // 실시간 데이터 불러오기
     const q = query(collection(db, "stress_methods"), orderBy("createdAt", "desc"));
     onSnapshot(q, (snapshot) => {
       const container = document.getElementById('methodsContainer');
       container.innerHTML = ""; 
       
-      // 3️⃣ 전체 참여(작성된 글) 개수 카운터 업데이트
       document.getElementById('userCount').innerText = snapshot.size;
 
       snapshot.forEach((docSnap) => {
@@ -178,12 +180,19 @@
         const cardDiv = document.createElement('div');
         cardDiv.className = 'card';
         
-        // 카드 상단: 날짜 표시 ("방금 전" 등)
+        // 카드 상단: 닉네임 + 날짜 표시
         const headerDiv = document.createElement('div');
         headerDiv.className = 'card-header';
+        
+        const nicknameSpan = document.createElement('span');
+        nicknameSpan.className = 'nickname-tag';
+        nicknameSpan.innerText = data.nickname || "익명";
+        headerDiv.appendChild(nicknameSpan);
+
         const dateSpan = document.createElement('span');
         dateSpan.innerText = timeAgo(data.createdAt?.toDate());
         headerDiv.appendChild(dateSpan);
+        
         cardDiv.appendChild(headerDiv);
 
         // 본문 내용
@@ -196,7 +205,6 @@
         const footerDiv = document.createElement('div');
         footerDiv.className = 'card-footer';
 
-        // 4️⃣ 좋아요 기능
         const likeBtn = document.createElement('button');
         likeBtn.className = 'like-btn';
         const isLiked = data.likes && data.likes.includes(currentUserUid);
@@ -220,17 +228,15 @@
           const btnGroup = document.createElement('div');
           btnGroup.className = 'btn-group';
 
-          // 모달창을 이용한 수정 버튼
           const editBtn = document.createElement('button');
           editBtn.className = 'edit-btn';
           editBtn.innerText = '수정';
           editBtn.addEventListener('click', () => {
             const modal = document.getElementById('editModal');
             const editInput = document.getElementById('editInput');
-            editInput.value = data.method; // 기존 내용 넣기
+            editInput.value = data.method;
             modal.style.display = 'flex';
 
-            // 저장 버튼 이벤트 덮어씌우기 방지를 위한 원스 타임 함수 설정
             document.getElementById('modalSaveBtn').onclick = async () => {
               const newMethod = editInput.value.trim();
               if (newMethod !== "" && newMethod !== data.method) {
